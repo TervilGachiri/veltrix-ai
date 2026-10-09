@@ -1,0 +1,823 @@
+import {
+  useEffect,
+  useCallback,
+  useRef,
+  useState,
+  type ChangeEvent
+} from "react";
+
+import {
+  Paperclip,
+  Camera,
+  Mic,
+  Volume2,
+  VolumeX,
+  Download,
+  Square,
+  X,
+  RotateCcw,
+  Check,
+  LoaderCircle
+} from "lucide-react";
+
+type Props = {
+  onInsert: (text: string) => void;
+  latestAnswer: string;
+};
+
+type SpeechAlternative = {
+  transcript: string;
+};
+
+type SpeechResult = {
+  isFinal: boolean;
+  [index: number]: SpeechAlternative;
+};
+
+type SpeechEvent = {
+  resultIndex: number;
+  results: ArrayLike<SpeechResult>;
+};
+
+type SpeechError = {
+  error: string;
+};
+
+type Recognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechEvent) => void) | null;
+  onerror: ((event: SpeechError) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechBrowser = Window & {
+  SpeechRecognition?: new () => Recognition;
+  webkitSpeechRecognition?: new () => Recognition;
+};
+
+export default function MediaTools({
+  onInsert,
+  latestAnswer
+}: Props) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<Recognition | null>(null);
+  const finalTranscriptRef = useRef("");
+  const speechFailedRef = useRef(false);
+
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [speaking, setSpeaking] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const [photoPreview, setPhotoPreview] = useState("");
+
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }
+
+
+  const attachVideo = useCallback(
+    (element: HTMLVideoElement | null) => {
+      videoRef.current = element;
+      if (!element) return;
+
+      const stream = streamRef.current;
+      if (!stream) {
+        setMessage("Camera stream unavailable.");
+        return;
+      }
+
+      element.muted = true;
+      element.playsInline = true;
+      element.autoplay = true;
+      element.srcObject = stream;
+
+      const reportReady = () => {
+        if (element.videoWidth > 0 &&
+            element.videoHeight > 0) {
+          setCameraReady(true);
+          setMessage("");
+        }
+      };
+
+      element.onloadeddata = reportReady;
+      element.onplaying = reportReady;
+
+      element.onloadedmetadata = () => {
+        void element.play().catch(error => {
+          setMessage(
+            "Camera playback: " +
+            (error instanceof Error
+              ? error.name + " - " + error.message
+              : "Playback unavailable")
+          );
+        });
+      };
+
+      // Safari may already have metadata when handlers attach.
+      if (element.readyState >= 1) {
+        void element.play().catch(error => {
+          setMessage(
+            "Camera playback: " +
+            (error instanceof Error
+              ? error.name + " - " + error.message
+              : "Playback unavailable")
+          );
+        });
+      }
+
+      reportReady();
+    },
+    []
+  );
+
+  function closeCamera() {
+    stopCamera();
+    setCameraReady(false);
+    setCameraOpen(false);
+    setPhoto(null);
+    setPhotoPreview("");
+  }
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      recognitionRef.current?.stop();
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+
+
+  async function openCamera() {
+    setMessage("");
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMessage(
+        "Live camera is unavailable in this browser or context. " +
+        "Use localhost/HTTPS or the Attach button."
+      );
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" }
+        },
+        audio: false
+      });
+
+      streamRef.current = stream;
+      setCameraReady(false);
+      setPhoto(null);
+      setPhotoPreview("");
+      setCameraOpen(true);
+    } catch (error) {
+      const name =
+        error instanceof Error ? error.name : "UnknownError";
+
+      if (name === "NotAllowedError") {
+        setMessage(
+          "Camera permission was denied. Allow camera access " +
+          "in Safari's website settings and try again."
+        );
+      } else if (name === "NotFoundError") {
+        setMessage("No available camera was found.");
+      } else {
+        setMessage(
+          `Camera could not start (${name}).`
+        );
+      }
+    }
+  }
+
+  async function capturePhoto() {
+    const video = videoRef.current;
+
+    if (!video || !cameraReady ||
+        !video.videoWidth || !video.videoHeight) {
+      setMessage("Camera is loading. Wait for the preview.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(
+      1,
+      1280 / Math.max(video.videoWidth, video.videoHeight)
+    );
+
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      setMessage("Unable to capture camera frame.");
+      return;
+    }
+
+    context.drawImage(
+      video,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const blob = await new Promise<Blob | null>(resolve =>
+      canvas.toBlob(resolve, "image/jpeg", 0.82)
+    );
+
+    if (!blob) {
+      setMessage("Unable to save captured photo.");
+      return;
+    }
+
+    setPhoto(blob);
+    setPhotoPreview(canvas.toDataURL("image/jpeg", 0.82));
+    stopCamera();
+  }
+
+  async function retakePhoto() {
+    setPhoto(null);
+    setPhotoPreview("");
+    await openCamera();
+  }
+
+  async function processFile(file: File) {
+    if (file.size > 8 * 1024 * 1024) {
+      setMessage("Maximum file size is 8 MB.");
+      return false;
+    }
+
+    const isImage =
+      file.type.startsWith("image/") ||
+      /\.(png|jpe?g|webp)$/i.test(file.name);
+
+    const data = new FormData();
+    data.append("file", file);
+
+    setBusy(true);
+    setMessage("Processing your file...");
+
+    try {
+      const response = await fetch(
+        isImage ? "/api/media/vision" : "/api/media/extract",
+        {
+          method: "POST",
+          credentials: "same-origin",
+          body: data
+        }
+      );
+
+      const raw = await response.text();
+
+      let result: {
+        detail?: string;
+        description?: string;
+        text?: string;
+      };
+
+      try {
+        result = JSON.parse(raw);
+      } catch {
+        throw new Error(
+          `Server returned an unexpected response (${response.status}).`
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          result.detail || `Upload failed (${response.status}).`
+        );
+      }
+
+      const extracted = isImage
+        ? result.description
+        : result.text;
+
+      if (!extracted?.trim()) {
+        throw new Error("No content could be extracted.");
+      }
+
+      onInsert(
+        `${isImage ? "Image" : "Document"}: ${file.name}\n` +
+        `${extracted}\n\nMy question: `
+      );
+
+      setMessage(
+        "Ready. Add your question and press Send."
+      );
+
+      return true;
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to process the file."
+      );
+
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFile(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (file) {
+      await processFile(file);
+    }
+  }
+
+  async function usePhoto() {
+    if (!photo) return;
+
+    const file = new File(
+      [photo],
+      "veltrix-camera.jpg",
+      { type: "image/jpeg" }
+    );
+
+    const success = await processFile(file);
+
+    if (success) {
+      closeCamera();
+    }
+  }
+
+  function stopVoice() {
+    recognitionRef.current?.stop();
+    setListening(false);
+  }
+
+  function startVoice() {
+    setMessage("");
+
+    const browser = window as SpeechBrowser;
+    const RecognitionConstructor =
+      browser.SpeechRecognition ||
+      browser.webkitSpeechRecognition;
+
+    if (!RecognitionConstructor) {
+      setMessage(
+        "This browser does not provide speech recognition. " +
+        "Try Google Chrome for voice dictation."
+      );
+      return;
+    }
+
+    const recognition = new RecognitionConstructor();
+
+    recognition.lang = "en-KE";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    finalTranscriptRef.current = "";
+    speechFailedRef.current = false;
+    setTranscript("");
+
+    recognition.onresult = event => {
+      let finalText = "";
+      let interimText = "";
+
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        const text = result[0]?.transcript || "";
+
+        if (result.isFinal) {
+          finalText += text + " ";
+        } else {
+          interimText += text + " ";
+        }
+      }
+
+      finalTranscriptRef.current = finalText.trim();
+
+      const displayed = (
+        finalText + " " + interimText
+      ).trim();
+
+      setTranscript(displayed);
+
+      if (finalText.trim()) {
+        setMessage("Speech recognized.");
+      } else {
+        setMessage("Listening and transcribing...");
+      }
+    };
+
+    recognition.onerror = event => {
+      speechFailedRef.current = true;
+
+      const messages: Record<string, string> = {
+        "not-allowed":
+          "Microphone permission denied. Allow microphone " +
+          "access in Safari's website settings.",
+        "service-not-allowed":
+          "Speech recognition service is not permitted.",
+        "no-speech":
+          "No speech detected. Try speaking clearly.",
+        "audio-capture":
+          "Microphone unavailable. Check macOS microphone settings.",
+        "network":
+          "Speech recognition network error. Browser speech " +
+          "recognition may require internet access."
+      };
+
+      setMessage(
+        messages[event.error] ||
+        `Speech recognition error: ${event.error}`
+      );
+
+      setListening(false);
+    };
+
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+
+      const recognized = finalTranscriptRef.current.trim();
+
+      if (recognized && !speechFailedRef.current) {
+        onInsert(recognized);
+        setTranscript("");
+        setMessage(
+          "Voice text added to your message. Press Send."
+        );
+      } else if (!speechFailedRef.current) {
+        setMessage("No words recognized. Please try again.");
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+      setListening(true);
+      setMessage("Microphone starting...");
+    } catch (error) {
+      recognitionRef.current = null;
+      setListening(false);
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to start speech recognition."
+      );
+    }
+  }
+
+  function toggleVoice() {
+    if (listening) {
+      stopVoice();
+    } else {
+      startVoice();
+    }
+  }
+
+  function toggleSpeech() {
+    if (!("speechSynthesis" in window)) {
+      setMessage("Text-to-speech unavailable.");
+      return;
+    }
+
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+
+    if (!latestAnswer.trim()) {
+      setMessage("Generate an AI answer first.");
+      return;
+    }
+
+    const speech = new SpeechSynthesisUtterance(
+      latestAnswer.slice(0, 10000)
+    );
+
+    speech.lang = "en-KE";
+    speech.rate = 1;
+    speech.onend = () => setSpeaking(false);
+    speech.onerror = () => setSpeaking(false);
+
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(speech);
+    setSpeaking(true);
+  }
+
+  async function exportAnswer() {
+    if (!latestAnswer.trim()) {
+      setMessage("Generate an AI answer before exporting.");
+      return;
+    }
+
+    const format = window.prompt(
+      "Export as: pdf, docx, xlsx or txt",
+      "pdf"
+    )?.trim().toLowerCase();
+
+    if (!format) return;
+
+    if (!["pdf", "docx", "xlsx", "txt"].includes(format)) {
+      setMessage("Choose pdf, docx, xlsx or txt.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("Generating report...");
+
+    try {
+      const response = await fetch("/api/media/export", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          text: latestAnswer,
+          format
+        })
+      });
+
+      if (!response.ok) {
+        const raw = await response.text();
+        let detail = `Export failed (${response.status}).`;
+
+        try {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.detail === "string") {
+            detail = parsed.detail;
+          }
+        } catch {
+          // Keep the HTTP status message.
+        }
+
+        throw new Error(detail);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `veltrix-report.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 5000);
+
+      setMessage("Export ready.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Export failed."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="veltrix-media">
+      <input
+        ref={fileInput}
+        type="file"
+        hidden
+        accept=".pdf,.docx,.xlsx,.txt,.csv,.png,.jpg,.jpeg,.webp"
+        onChange={handleFile}
+      />
+
+      <div
+        className="veltrix-media-actions"
+        style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+      >
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          disabled={busy}
+        >
+          <Paperclip size={17} /> Attach
+        </button>
+
+        <button
+          type="button"
+          onClick={openCamera}
+          disabled={busy}
+        >
+          <Camera size={17} /> Camera
+        </button>
+
+        <button
+          type="button"
+          onClick={toggleVoice}
+          disabled={busy}
+          aria-pressed={listening}
+        >
+          {listening
+            ? <Square size={17} />
+            : <Mic size={17} />}
+          {listening ? "Stop" : "Voice"}
+        </button>
+
+        <button
+          type="button"
+          onClick={toggleSpeech}
+        >
+          {speaking
+            ? <VolumeX size={17} />
+            : <Volume2 size={17} />}
+          {speaking ? "Stop" : "Listen"}
+        </button>
+
+        <button
+          type="button"
+          onClick={exportAnswer}
+          disabled={busy}
+        >
+          <Download size={17} /> Export
+        </button>
+      </div>
+
+      {listening && (
+        <div
+          role="status"
+          style={{
+            padding: 10,
+            marginTop: 8,
+            border: "1px solid currentColor",
+            borderRadius: 10
+          }}
+        >
+          <strong>Listening...</strong>
+          <p>
+            {transcript || "Speak now. Your words will appear here."}
+          </p>
+        </div>
+      )}
+
+      {busy && (
+        <p className="veltrix-media-status">
+          <LoaderCircle size={14} /> Processing...
+        </p>
+      )}
+
+      {message && (
+        <p className="veltrix-media-status" role="status">
+          {message}
+        </p>
+      )}
+
+      {cameraOpen && (
+        <div
+          role="dialog"
+          aria-label="Veltrix camera"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 10000,
+            background: "rgba(0,0,0,.88)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 16
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 650,
+              padding: 18,
+              borderRadius: 16,
+              background: "#20232b",
+              color: "#fff"
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12
+              }}
+            >
+              <strong>Veltrix AI Camera</strong>
+
+              <button
+                type="button"
+                onClick={closeCamera}
+                aria-label="Close camera"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {!photo ? (
+              <video
+                ref={attachVideo}
+                autoPlay
+                playsInline
+                muted
+                onPlaying={() => setCameraReady(true)}
+                onEmptied={() => setCameraReady(false)}
+                style={{
+                  width: "100%",
+                  maxHeight: 430,
+                  background: "#000",
+                  borderRadius: 12
+                }}
+              />
+            ) : (
+              <img
+                src={photoPreview}
+                alt="Captured photo preview"
+                style={{
+                  width: "100%",
+                  maxHeight: 430,
+                  objectFit: "contain",
+                  borderRadius: 12
+                }}
+              />
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 10,
+                justifyContent: "center",
+                marginTop: 16
+              }}
+            >
+              {!photo ? (
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  disabled={!cameraReady}
+                >
+                  <Camera size={17} />
+                  {cameraReady ? "Capture Photo" : "Starting Camera..."}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={retakePhoto}
+                    disabled={busy}
+                  >
+                    <RotateCcw size={17} /> Retake
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={usePhoto}
+                    disabled={busy}
+                  >
+                    <Check size={17} /> Use Photo
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={closeCamera}
+              >
+                Cancel
+              </button>
+            </div>
+
+            {message && (
+              <p role="status" style={{ marginTop: 12 }}>
+                {message}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

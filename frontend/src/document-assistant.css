@@ -1,0 +1,231 @@
+
+.vd-launcher{
+  position:fixed;
+  right:20px;
+  bottom:20px;
+  z-index:90;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:13px 18px;
+  border:0;
+  border-radius:15px;
+  background:#6860e8;
+  color:#fff;
+  font-weight:700;
+  box-shadow:0 8px 28px #302a8055;
+}
+.vd-overlay{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  background:#080d20aa;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding:15px;
+}
+.vd-panel{
+  background:var(--panel,#fff);
+  color:var(--text,#19233d);
+  width:min(700px,100%);
+  max-height:94vh;
+  overflow:auto;
+  border-radius:22px;
+  border:1px solid var(--line,#e2e6f0);
+  box-shadow:0 24px 80px #0004;
+}
+.vd-header{
+  display:flex;
+  justify-content:space-between;
+  padding:25px 28px 17px;
+  border-bottom:1px solid var(--line,#e2e6f0);
+}
+.vd-header small{
+  color:var(--accent,#6860e8);
+  font-weight:800;
+  letter-spacing:2px;
+}
+.vd-header h2{
+  font-size:23px;
+  margin:8px 0;
+}
+.vd-header p,.vd-drop p,.vd-document p,.vd-note{
+  color:var(--muted,#75809a);
+  font-size:12px;
+  line-height:1.6;
+}
+.vd-close{
+  background:transparent;
+  color:inherit;
+  border:0;
+  align-self:flex-start;
+}
+.vd-body{
+  padding:25px 28px;
+}
+.vd-drop{
+  padding:32px 18px;
+  border:2px dashed var(--line,#dce0ec);
+  border-radius:17px;
+  background:var(--bg,#f7f8fc);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+  gap:8px;
+}
+.vd-dragging{
+  border-color:var(--accent,#6860e8);
+}
+.vd-drop-icon{
+  background:#efedff;
+  color:#6860e8;
+  padding:13px;
+  border-radius:14px;
+}
+.vd-drop button,.vd-question button{
+  margin-top:9px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:11px 17px;
+  color:white;
+  background:#6860e8;
+  border:0;
+  border-radius:11px;
+  font-weight:700;
+}
+.vd-drop button:disabled,.vd-question button:disabled{
+  opacity:.5;
+}
+.vd-status,.vd-error{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:15px;
+  padding:12px;
+  font-size:13px;
+}
+.vd-error{
+  color:#cb4755;
+  background:#ffe9eb;
+  border-radius:10px;
+}
+.vd-spin{
+  animation:vd-rotate 1s linear infinite;
+}
+@keyframes vd-rotate{
+  to{transform:rotate(360deg)}
+}
+.vd-document,.vd-answer{
+  margin-top:20px;
+  padding:20px;
+  border-radius:15px;
+  border:1px solid var(--line,#e2e6f0);
+}
+.vd-document-title{
+  display:flex;
+  align-items:center;
+  gap:11px;
+}
+.vd-document-title div{
+  flex:1;
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+.vd-document-title p{
+  margin:4px 0;
+}
+.vd-document-title svg:last-child{
+  color:#22a36d;
+}
+.vd-warning{
+  color:#ad7429!important;
+}
+.vd-document details{
+  margin:17px 0;
+  font-size:13px;
+}
+.vd-document pre{
+  overflow:auto;
+  white-space:pre-wrap;
+  max-height:200px;
+  background:var(--bg,#f7f8fc);
+  padding:12px;
+  border-radius:8px;
+}
+.vd-question{
+  margin-top:20px;
+}
+.vd-question label{
+  display:block;
+  font-weight:700;
+  font-size:13px;
+  margin-bottom:10px;
+}
+.vd-question textarea{
+  display:block;
+  width:100%;
+  min-height:95px;
+  background:var(--bg,#f7f8fc);
+  color:var(--text,#19233d);
+  border:1px solid var(--line,#e2e6f0);
+  border-radius:12px;
+  padding:12px;
+}
+.vd-answer h3{
+  margin:0 0 14px;
+}
+.vd-answer-text{
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  line-height:1.75;
+  font-size:13px;
+}
+.vd-export{
+  border-top:1px solid var(--line,#e2e6f0);
+  margin-top:20px;
+  padding-top:14px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.vd-export span{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+}
+.vd-export button{
+  border:1px solid var(--line,#e2e6f0);
+  background:var(--bg,#f7f8fc);
+  color:var(--text,#19233d);
+  padding:9px;
+  border-radius:8px;
+  font-size:11px;
+}
+.vd-note{
+  margin-top:19px;
+}
+@media(max-width:600px){
+  .vd-launcher{
+    right:12px;
+    bottom:12px;
+    padding:11px 13px;
+  }
+  .vd-body,.vd-header{
+    padding:17px;
+  }
+}
+
+/* VELTRIX MOBILE BUTTON FIX START */
+
+.vd-launcher {
+  top: 192px !important;
+  bottom: auto !important;
+  right: 14px !important;
+  z-index: 89;
+}
+/* VELTRIX MOBILE BUTTON FIX END */

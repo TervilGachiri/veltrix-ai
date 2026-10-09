@@ -1,0 +1,98 @@
+.vt-launch{
+position:fixed;right:20px;bottom:134px;z-index:89;
+display:flex;align-items:center;gap:9px;padding:13px 18px;
+border:0;border-radius:15px;background:#126c6b;color:white;
+font-weight:700;box-shadow:0 8px 26px #113b3b44}
+.vt-overlay{
+position:fixed;inset:0;z-index:120;background:#070c1bbb;
+display:flex;align-items:center;justify-content:center;padding:15px}
+.vt-panel{
+width:min(780px,100%);max-height:94vh;
+display:flex;flex-direction:column;overflow:hidden;
+background:var(--panel,#fff);color:var(--text,#19233d);
+border:1px solid var(--line,#ddd);border-radius:22px;
+box-shadow:0 30px 90px #0005}
+.vt-header{
+padding:23px 26px 17px;display:flex;
+justify-content:space-between;gap:15px;
+border-bottom:1px solid var(--line,#ddd)}
+.vt-header small{font-size:10px;letter-spacing:1.5px;
+font-weight:800;color:#159b8c}
+.vt-header h2{margin:6px 0;font-size:24px}
+.vt-header p,.vt-muted{
+font-size:12px;line-height:1.6;
+color:var(--muted,#75809a)}
+.vt-icon,.vt-back{background:transparent;border:0;color:inherit}
+.vt-body{overflow:auto;padding:24px 26px;flex:1}
+.vt-body h3{display:flex;align-items:center;gap:9px;
+font-size:16px;margin:0 0 15px}
+.vt-cards{display:grid;gap:9px;margin:12px 0 19px}
+.vt-org{
+display:flex;align-items:center;gap:12px;width:100%;
+border:1px solid var(--line,#ddd);border-radius:12px;
+padding:15px;background:var(--bg,#f8f9fc);
+color:var(--text,#19233d);text-align:left}
+.vt-org>span:nth-child(2){flex:1;min-width:0}
+.vt-org strong,.vt-member strong{display:block;font-size:13px}
+.vt-org small,.vt-member small{
+display:block;font-size:11px;margin-top:5px;
+color:var(--muted,#75809a);overflow-wrap:anywhere}
+.vt-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.vt-card{
+border:1px solid var(--line,#ddd);
+border-radius:15px;padding:18px;margin-bottom:17px;
+background:var(--bg,#f8f9fc)}
+.vt-card input,.vt-card textarea{
+width:100%;border:1px solid var(--line,#ddd);
+border-radius:10px;padding:12px;margin:6px 0 10px;
+background:var(--panel,#fff);color:var(--text,#19233d);
+font:inherit;font-size:13px}
+.vt-card button,.vt-invite button{
+display:inline-flex;align-items:center;gap:8px;
+border:0;border-radius:10px;padding:11px 14px;
+background:#126c6b;color:white;font-weight:700;font-size:12px}
+.vt-card button:disabled{opacity:.45;cursor:default}
+.vt-back{display:flex;align-items:center;gap:8px;
+padding:0;margin-bottom:22px;font-size:12px;font-weight:700}
+.vt-member{display:flex;justify-content:space-between;
+align-items:center;border-bottom:1px solid var(--line,#ddd);
+padding:11px 0;gap:10px}
+.vt-role{font-size:11px;color:#159b8c;font-weight:700}
+.vt-invite{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.vt-invite code{flex:1;overflow-wrap:anywhere;font-size:12px;
+background:var(--panel,#fff);padding:10px;border-radius:9px}
+.vt-posts{min-height:170px;max-height:350px;overflow:auto;
+border:1px solid var(--line,#ddd);border-radius:13px;
+padding:15px;margin-bottom:15px}
+.vt-post{padding:12px 0;border-bottom:1px solid var(--line,#ddd)}
+.vt-post>div{display:flex;justify-content:space-between;gap:10px}
+.vt-post strong{font-size:12px}.vt-post small{font-size:10px;
+color:var(--muted,#75809a)}
+.vt-post p{white-space:pre-wrap;overflow-wrap:anywhere;
+font-size:13px;line-height:1.6}
+.vt-actions{display:flex;justify-content:space-between;gap:10px}
+.vt-footer{padding:13px 26px;border-top:1px solid var(--line,#ddd);
+display:flex;align-items:center;gap:8px;
+font-size:11px;color:var(--muted,#75809a)}
+.vt-error,.vt-info,.vt-loading{
+padding:12px 26px;font-size:12px}
+.vt-error{background:#ffe7eb;color:#b72b43}
+.vt-info{background:#ddf8ed;color:#136847}
+.vt-loading{display:flex;align-items:center;gap:8px}
+.vt-spin{animation:vt-spin 1s linear infinite}
+@keyframes vt-spin{to{transform:rotate(360deg)}}
+@media(max-width:600px){
+.vt-launch{right:12px;bottom:120px;padding:11px 13px}
+.vt-grid{grid-template-columns:1fr}
+.vt-header,.vt-body{padding:17px}
+}
+
+/* VELTRIX MOBILE BUTTON FIX START */
+
+.vt-launch {
+  top: 82px !important;
+  bottom: auto !important;
+  right: 14px !important;
+  z-index: 89;
+}
+/* VELTRIX MOBILE BUTTON FIX END */

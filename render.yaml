@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: veltrix-ai-api
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    disk:
+      name: veltrix-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: VELTRIX_ENV
+        value: production
+      - key: VELTRIX_DATABASE_PATH
+        value: /var/data/veltrix_auth.db
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: VELTRIX_FRONTEND_ORIGIN
+        sync: false

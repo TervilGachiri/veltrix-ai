@@ -1,0 +1,146 @@
+import re
+import os
+import httpx
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from openai import OpenAI, OpenAIError
+
+load_dotenv()
+app = FastAPI(title="Veltrix AI API", version="0.1.0")
+origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+
+class Message(BaseModel):
+    role: str
+    content: str = Field(min_length=1, max_length=12000)
+
+class ChatRequest(BaseModel):
+    messages: list[Message] = Field(min_length=1, max_length=25)
+    mode: str = "personal"
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "service": "veltrix-ai"}
+
+@app.post("/api/chat")
+def chat(data: ChatRequest):
+    if data.mode not in ("personal", "business"):
+        raise HTTPException(422, "Unsupported mode")
+    if any(m.role not in ("user", "assistant") for m in data.messages) or data.messages[-1].role != "user":
+        raise HTTPException(422, "Invalid conversation")
+
+    provider = os.getenv("AI_PROVIDER", "ollama").lower()
+
+    if provider == "ollama":
+        instruction = (
+            (
+                "You are operating as Veltrix AI, the assistant experience "
+                "inside the Veltrix AI application. "
+                "Your role is to help users with clear, useful answers. "
+                "Introduce yourself as Veltrix AI when asked your assistant name. "
+                "Veltrix AI currently uses a Qwen language model powered by Ollama. "
+                "If asked about your underlying model, disclose that accurately. "
+                "Do not confuse your application name with the model developer. "
+                "Keep introductions concise and natural. "
+            )
+            "Be accurate, friendly, professional and transparent about uncertainty. "
+            "Never claim to have performed actions you cannot perform. "
+        )
+
+        if data.mode == "business":
+            instruction += (
+                "You are assisting in a business workspace. "
+                "Help with business planning, operations, productivity, "
+                "reports, management and professional tasks. "
+                "Do not claim access to private company records."
+            )
+        else:
+            instruction += (
+                "Help with learning, technology, creativity, "
+                "research, programming and everyday questions."
+            )
+
+        messages = [
+            {"role": "system", "content": instruction},
+            *[
+                {"role": m.role, "content": m.content}
+                for m in data.messages
+            ],
+        ]
+
+        try:
+            with httpx.Client(timeout=240.0) as client:
+                response = client.post(
+                    "http://127.0.0.1:11434/api/chat",
+                    json={
+                        "model": os.getenv("OLLAMA_MODEL", "qwen3:4b"),
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"num_predict": 700},
+                        "think": False,
+                    },
+                )
+                response.raise_for_status()
+                result = response.json()
+
+            reply = result.get("message", {}).get("content", "")
+
+            # Remove reasoning blocks if the model includes them.
+            reply = re.sub(
+                r"<think>.*?</think>",
+                "",
+                reply,
+                flags=re.DOTALL
+            ).strip()
+
+            # Handle a response with a dangling closing think tag.
+            if "</think>" in reply:
+                reply = reply.split("</think>")[-1].strip()
+
+            if not reply:
+                raise HTTPException(
+                    502, "The local AI returned an empty response."
+                )
+
+            return {"reply": reply}
+
+        except httpx.ConnectError:
+            raise HTTPException(
+                503, "Ollama is not running. Start Ollama first."
+            )
+        except httpx.TimeoutException:
+            raise HTTPException(
+                504, "The local AI took too long to respond."
+            )
+        except httpx.HTTPStatusError:
+            raise HTTPException(
+                502, "Ollama could not process the AI request."
+            )
+
+    if provider != "openai":
+        raise HTTPException(503, "Unsupported AI provider.")
+
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise HTTPException(503, "AI provider is not configured. Add OPENAI_API_KEY to backend/.env.")
+    instruction = (
+        "You are Veltrix AI, a helpful, accurate, friendly AI assistant. Be transparent about uncertainty. "
+        "Do not claim actions, tools, or integrations you do not have. "
+    )
+    if data.mode == "business":
+        instruction += "Focus on practical, clear business assistance; do not pretend to have access to company data."
+    else:
+        instruction += "Support general questions, learning, creativity and everyday tasks."
+    try:
+        client = OpenAI(api_key=key, timeout=40.0)
+        resp = client.responses.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+            instructions=instruction,
+            input=[{"role": m.role, "content": m.content} for m in data.messages],
+            max_output_tokens=1200,
+        )
+        return {"reply": resp.output_text or "No text response was returned."}
+    except OpenAIError:
+        raise HTTPException(502, "AI provider request failed. Check your API key, model access and billing.")

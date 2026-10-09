@@ -1,0 +1,52 @@
+import os
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from openai import OpenAI, OpenAIError
+
+load_dotenv()
+app = FastAPI(title="Veltrix AI API", version="0.1.0")
+origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+
+class Message(BaseModel):
+    role: str
+    content: str = Field(min_length=1, max_length=12000)
+
+class ChatRequest(BaseModel):
+    messages: list[Message] = Field(min_length=1, max_length=25)
+    mode: str = "personal"
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "service": "veltrix-ai"}
+
+@app.post("/api/chat")
+def chat(data: ChatRequest):
+    if data.mode not in ("personal", "business"):
+        raise HTTPException(422, "Unsupported mode")
+    if any(m.role not in ("user", "assistant") for m in data.messages) or data.messages[-1].role != "user":
+        raise HTTPException(422, "Invalid conversation")
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise HTTPException(503, "AI provider is not configured. Add OPENAI_API_KEY to backend/.env.")
+    instruction = (
+        "You are Veltrix AI, a helpful, accurate, friendly AI assistant. Be transparent about uncertainty. "
+        "Do not claim actions, tools, or integrations you do not have. "
+    )
+    if data.mode == "business":
+        instruction += "Focus on practical, clear business assistance; do not pretend to have access to company data."
+    else:
+        instruction += "Support general questions, learning, creativity and everyday tasks."
+    try:
+        client = OpenAI(api_key=key, timeout=40.0)
+        resp = client.responses.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+            instructions=instruction,
+            input=[{"role": m.role, "content": m.content} for m in data.messages],
+            max_output_tokens=1200,
+        )
+        return {"reply": resp.output_text or "No text response was returned."}
+    except OpenAIError:
+        raise HTTPException(502, "AI provider request failed. Check your API key, model access and billing.")

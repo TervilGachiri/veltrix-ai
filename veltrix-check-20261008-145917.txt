@@ -1,0 +1,18 @@
+VELTRIX AI DEVELOPMENT REPORT
+Date: Thu Oct  8 14:59:31 EAT 2026
+
+Python files:
+backend/conversation_routes.py
+backend/auth_routes.py
+backend/main.py
+
+Frontend files:
+frontend/src/App.tsx.before-order-fix
+frontend/src/App.tsx
+frontend/src/main.tsx
+frontend/src/styles.css
+frontend/src/AuthScreen.tsx
+frontend/src/example.ts
+
+Available API paths:
+Backend unavailable

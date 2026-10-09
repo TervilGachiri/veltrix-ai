@@ -1,0 +1,340 @@
+import {
+  useRef, useState,
+  type ChangeEvent
+} from "react";
+import {
+  Paperclip, Camera, Mic, Volume2,
+  Download, LoaderCircle, Square, VolumeX
+} from "lucide-react";
+
+type Props = {
+  onInsert: (text: string) => void;
+  latestAnswer: string;
+};
+
+type SpeechResult = {
+  results: ArrayLike<ArrayLike<{ transcript: string }>>;
+};
+
+type SpeechRecognizer = {
+  lang: string;
+  onresult: ((event: SpeechResult) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognizer;
+  webkitSpeechRecognition?: new () => SpeechRecognizer;
+};
+
+export default function MediaTools({
+  onInsert,
+  latestAnswer
+}: Props) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  const recognizer = useRef<SpeechRecognizer | null>(null);
+
+  const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function upload(
+    event: ChangeEvent<HTMLInputElement>,
+    camera = false
+  ) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    event.target.value = "";
+    setMessage("");
+
+    if (file.size > 8 * 1024 * 1024) {
+      setMessage("Maximum file size is 8 MB.");
+      return;
+    }
+
+    const isImage = file.type.startsWith("image/") ||
+      /\.(png|jpe?g|webp)$/i.test(file.name);
+
+    const data = new FormData();
+    data.append("file", file);
+
+    setBusy(true);
+
+    try {
+      const response = await fetch(
+        isImage ? "/api/media/vision" : "/api/media/extract",
+        {
+          method: "POST",
+          credentials: "same-origin",
+          body: data
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          typeof result.detail === "string"
+            ? result.detail
+            : "Unable to process file."
+        );
+      }
+
+      const extracted = isImage
+        ? result.description
+        : result.text;
+
+      const context = isImage
+        ? `Image analysis from ${file.name}:\n${extracted}`
+        : `Document ${file.name}:\n${extracted}`;
+
+      onInsert(context);
+
+      setMessage(
+        camera
+          ? "Photo analyzed. Add your question and send."
+          : "File processed. Add your question and send."
+      );
+
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "File upload failed."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggleMic() {
+    if (listening) {
+      recognizer.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    const browser = window as SpeechWindow;
+    const Constructor =
+      browser.SpeechRecognition ||
+      browser.webkitSpeechRecognition;
+
+    if (!Constructor) {
+      setMessage(
+        "Speech recognition is unavailable in this browser. " +
+        "Try a compatible browser or use the keyboard."
+      );
+      return;
+    }
+
+    const recognition = new Constructor();
+    recognition.lang = "en-US";
+
+    recognition.onresult = event => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0]?.transcript || "")
+        .join(" ");
+
+      if (transcript.trim()) {
+        onInsert(transcript.trim());
+      }
+    };
+
+    recognition.onerror = () => {
+      setListening(false);
+      setMessage("Microphone recognition failed or permission was denied.");
+    };
+
+    recognition.onend = () => setListening(false);
+
+    recognizer.current = recognition;
+
+    try {
+      recognition.start();
+      setListening(true);
+      setMessage("Listening...");
+    } catch {
+      setMessage("Unable to start microphone.");
+    }
+  }
+
+  function toggleSpeech() {
+    if (!("speechSynthesis" in window)) {
+      setMessage("Spoken responses are unavailable in this browser.");
+      return;
+    }
+
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+
+    if (!latestAnswer.trim()) {
+      setMessage("Ask Veltrix AI a question first.");
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(
+      latestAnswer.slice(0, 10000)
+    );
+
+    utterance.rate = 1;
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+
+    window.speechSynthesis.speak(utterance);
+    setSpeaking(true);
+  }
+
+  async function exportAnswer() {
+    if (!latestAnswer.trim()) {
+      setMessage("There is no AI answer to export yet.");
+      return;
+    }
+
+    const format = window.prompt(
+      "Export format: pdf, docx, xlsx or txt",
+      "pdf"
+    )?.trim().toLowerCase();
+
+    if (!format) return;
+
+    if (!["pdf", "docx", "xlsx", "txt"].includes(format)) {
+      setMessage("Choose pdf, docx, xlsx or txt.");
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const response = await fetch("/api/media/export", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: latestAnswer,
+          format
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not generate the file.");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `veltrix-report.${format}`;
+      link.click();
+
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage("Report generated.");
+
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Export failed."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="veltrix-media">
+      <input
+        ref={fileInput}
+        type="file"
+        hidden
+        accept=".pdf,.docx,.xlsx,.txt,.csv,.png,.jpg,.jpeg,.webp"
+        onChange={event => upload(event)}
+      />
+
+      <input
+        ref={cameraInput}
+        type="file"
+        hidden
+        accept="image/*"
+        capture="environment"
+        onChange={event => upload(event, true)}
+      />
+
+      <div className="veltrix-media-actions">
+        <button
+          type="button"
+          title="Upload document or picture"
+          onClick={() => fileInput.current?.click()}
+          disabled={busy}
+        >
+          <Paperclip size={17}/> Attach
+        </button>
+
+        <button
+          type="button"
+          title="Take a picture"
+          onClick={() => cameraInput.current?.click()}
+          disabled={busy}
+        >
+          <Camera size={17}/> Camera
+        </button>
+
+        <button
+          type="button"
+          title="Dictate your question"
+          onClick={toggleMic}
+          disabled={busy}
+          aria-pressed={listening}
+        >
+          {listening
+            ? <Square size={17}/>
+            : <Mic size={17}/>}
+          {listening ? "Stop" : "Voice"}
+        </button>
+
+        <button
+          type="button"
+          title="Read AI answer aloud"
+          onClick={toggleSpeech}
+        >
+          {speaking
+            ? <VolumeX size={17}/>
+            : <Volume2 size={17}/>}
+          {speaking ? "Stop voice" : "Listen"}
+        </button>
+
+        <button
+          type="button"
+          title="Download AI response"
+          onClick={exportAnswer}
+          disabled={busy}
+        >
+          <Download size={17}/> Export
+        </button>
+      </div>
+
+      {busy && (
+        <p className="veltrix-media-status">
+          <LoaderCircle size={14}/> Processing...
+        </p>
+      )}
+
+      {message && (
+        <p className="veltrix-media-status" role="status">
+          {message}
+        </p>
+      )}
+    </div>
+  );
+}

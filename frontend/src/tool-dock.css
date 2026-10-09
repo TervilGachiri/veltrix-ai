@@ -1,0 +1,131 @@
+/*
+  Veltrix tools dock.
+
+  Collapsed: one button at the middle right.
+  Expanded: three tools stacked around the
+  middle of the screen.
+
+  No controls overlap the header or composer.
+*/
+
+.vx-tools-toggle {
+  position: fixed !important;
+  top: 49% !important;
+  right: 12px !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: translateY(-50%);
+  z-index: 95 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 13px;
+  min-height: 43px;
+  border: none;
+  border-radius: 13px;
+  background: #5e58d7;
+  color: #fff;
+  box-shadow: 0 7px 22px #161a5060;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Hide individual tools while the dock is closed. */
+
+body:not(.vx-tools-open) .vt-launch,
+body:not(.vx-tools-open) .vs-launch,
+body:not(.vx-tools-open) .vd-launcher {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Reveal three tools in one compact vertical group. */
+
+body.vx-tools-open .vt-launch,
+body.vx-tools-open .vs-launch,
+body.vx-tools-open .vd-launcher {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+
+  position: fixed !important;
+  left: auto !important;
+  bottom: auto !important;
+  right: 12px !important;
+
+  transform: none !important;
+  z-index: 94 !important;
+
+  min-height: 42px;
+  min-width: 112px;
+
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+
+  padding: 10px 12px !important;
+  font-size: 12px;
+}
+
+body.vx-tools-open .vt-launch {
+  top: calc(49% - 118px) !important;
+}
+
+body.vx-tools-open .vs-launch {
+  top: calc(49% - 68px) !important;
+}
+
+body.vx-tools-open .vd-launcher {
+  top: calc(49% + 32px) !important;
+}
+
+/* Keep the main message composer interactive. */
+
+.compose-wrap {
+  position: relative;
+  z-index: 2;
+}
+
+.compose {
+  position: relative;
+}
+
+.compose textarea {
+  position: relative;
+  pointer-events: auto !important;
+}
+
+.compose .send,
+.compose button[type="submit"],
+.compose button[aria-label="Send message"] {
+  position: relative;
+  z-index: 5;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+}
+
+/* On narrow phones, protect the message field. */
+
+@media (max-width: 600px) {
+  .vx-tools-toggle {
+    right: 7px !important;
+    padding: 10px !important;
+    min-height: 42px;
+  }
+
+  body.vx-tools-open .vt-launch,
+  body.vx-tools-open .vs-launch,
+  body.vx-tools-open .vd-launcher {
+    right: 7px !important;
+    min-width: 102px;
+    padding: 9px !important;
+    font-size: 11px;
+  }
+
+  .compose-wrap {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
