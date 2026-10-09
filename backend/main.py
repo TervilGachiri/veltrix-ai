@@ -19,7 +19,7 @@ from openai import OpenAI, OpenAIError
 load_dotenv()
 app = FastAPI(title="Veltrix AI API", version="0.1.0")
 origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=list(set(origins + ["https://localhost", "http://localhost"])), allow_credentials=True, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Content-Type"])
 
 class Message(BaseModel):
     role: str
@@ -235,7 +235,11 @@ async def veltrix_access_control(request, call_next):
 
     if path.startswith("/api/"):
         fetch_site = request.headers.get("sec-fetch-site", "")
-        if fetch_site == "cross-site":
+        # Capacitor's bundled Android UI uses a different HTTPS origin.
+        # Only the explicitly trusted mobile origins are allowed through.
+        if fetch_site == "cross-site" and request.headers.get("origin", "").rstrip("/") not in {
+            "https://localhost", "http://localhost"
+        }:
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Cross-site request blocked."},

@@ -114,7 +114,7 @@ def create_session(response, user_id):
         value=token,
         httponly=True,
         secure=PRODUCTION,
-        samesite="lax",
+        samesite="none" if PRODUCTION else "lax",
         max_age=SESSION_SECONDS,
         path="/",
     )
