@@ -186,7 +186,13 @@ def chat(data: ChatRequest):
             if not reply:
                 raise HTTPException(502, "AI returned an empty response.")
             return {"reply": reply}
-        except OpenAIError:
+        except OpenAIError as exc:
+            import logging
+            logging.getLogger("veltrix.ai").error(
+                "Groq failure: type=%s status=%s",
+                type(exc).__name__,
+                getattr(exc, "status_code", "unavailable"),
+            )
             raise HTTPException(
                 502,
                 "Hosted AI request failed. Check provider access, model and rate limits.",
