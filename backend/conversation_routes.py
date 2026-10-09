@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from db_compat import connect
 import time
 from pathlib import Path
 from typing import Literal
@@ -35,9 +36,7 @@ class ConversationSync(BaseModel):
 
 
 def connection():
-    db = sqlite3.connect(DB_PATH, timeout=10)
-    db.row_factory = sqlite3.Row
-    return db
+    return connect(DB_PATH, timeout=10)
 
 
 def initialize():

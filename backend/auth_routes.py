@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import sqlite3
+from db_compat import connect, is_integrity_error
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -21,8 +22,7 @@ PRODUCTION = os.getenv("VELTRIX_ENV") == "production"
 
 @contextmanager
 def db():
-    connection = sqlite3.connect(str(DATABASE), timeout=10)
-    connection.row_factory = sqlite3.Row
+    connection = connect(DATABASE, timeout=10)
     try:
         yield connection
         connection.commit()
@@ -165,7 +165,9 @@ def register(data: RegisterRequest, response: Response):
                 user_id, name, email, salt, password_hash,
                 int(time.time())
             ))
-    except sqlite3.IntegrityError:
+    except Exception as exc:
+        if not is_integrity_error(exc):
+            raise
         raise HTTPException(
             409, "An account with this email already exists."
         )
