@@ -154,6 +154,45 @@ def chat(data: ChatRequest):
                 502, "Ollama could not process the AI request."
             )
 
+    if provider == "groq":
+        # Groq Chat Completions is compatible with the existing OpenAI SDK.
+        # Never send this key to the frontend or store it in Git.
+        key = os.getenv("GROQ_API_KEY")
+        if not key:
+            raise HTTPException(503, "Groq AI is not configured on the server.")
+        instruction = (
+            "You are Veltrix AI, a helpful and accurate AI assistant. "
+            "Do not claim access to tools, private records, or actions you cannot perform. "
+        )
+        if data.mode == "business":
+            instruction += "Provide clear, practical business assistance. "
+        else:
+            instruction += "Help with learning, technology and everyday questions. "
+        try:
+            client = OpenAI(
+                api_key=key,
+                base_url="https://api.groq.com/openai/v1",
+                timeout=45.0,
+                max_retries=1,
+            )
+            result = client.chat.completions.create(
+                model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
+                messages=[
+                    {"role": "system", "content": instruction},
+                    *[{"role": m.role, "content": m.content} for m in data.messages],
+                ],
+                max_tokens=900,
+            )
+            reply = (result.choices[0].message.content or "").strip()
+            if not reply:
+                raise HTTPException(502, "AI returned an empty response.")
+            return {"reply": reply}
+        except OpenAIError:
+            raise HTTPException(
+                502,
+                "Hosted AI request failed. Check provider access, model and rate limits.",
+            )
+
     if provider != "openai":
         raise HTTPException(503, "Unsupported AI provider.")
 
